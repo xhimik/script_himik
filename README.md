@@ -1,6 +1,6 @@
 # script_himik
-мои скрипты
+Скрипт установки Passwall2 на все архитектуры и версии автоматом , скачивает и ставит ВСЕ,примерно 80Мб !! 
 
-запуск на роуторе 
+Запуск на OpenWrt: 
 
-wget -O - https://raw.githubusercontent.com/xhimik/script_himik/main/install_passwall2.sh | sh
+```wget -O - https://raw.githubusercontent.com/xhimik/script_himik/main/install_passwall2.sh | sh```
