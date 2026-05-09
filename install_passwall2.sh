@@ -397,7 +397,7 @@ install_base_deps() {
 
         # Собираем недостающие пакеты
         local missing=""
-        local pkgs="coreutils coreutils-base64 coreutils-nohup curl \
+        local pkgs="coreutils-base64 coreutils-nohup curl \
             libuci-lua lua luci-compat luci-lib-jsonc lyaml resolveip unzip kmod-nft-socket kmod-nft-nat kmod-nft-tproxy"
 
         for pkg in ${pkgs}; do
@@ -432,9 +432,8 @@ install_base_deps() {
     else
         opkg update >/dev/null 2>&1
         local missing=""
-        local pkgs="coreutils coreutils-base64 coreutils-nohup curl \
-            libuci-lua lua luci-compat luci-lib-jsonc lyaml resolveip unzip \
-            ip-full kmod-nft-socket kmod-nft-tproxy  "
+        local pkgs="coreutils-base64 coreutils-nohup curl \
+            libuci-lua lua luci-compat luci-lib-jsonc lyaml resolveip unzip kmod-nft-socket kmod-nft-nat kmod-nft-tproxy"
 
         for pkg in ${pkgs}; do
             if ! opkg list-installed 2>/dev/null | grep -q "^${pkg} "; then
