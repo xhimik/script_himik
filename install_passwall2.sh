@@ -15,7 +15,9 @@
 
 
 REPO="Openwrt-Passwall/openwrt-passwall2"
-ARCH="aarch64_cortex-a53"
+ARCH=""
+ARCH_APK=""
+ARCH_IPK=""
 INSTALL_DIR="/tmp/passwall2_install"
 LANG_CODE="ru"
 
@@ -123,6 +125,104 @@ parse_tag() {
     log_info "Версия: ${PW2_VERSION}, Релиз: ${PW2_RELEASE:-none}"
 }
 
+# --- Определение архитектуры ---
+detect_arch() {
+    local machine
+    machine=$(uname -m 2>/dev/null)
+    case "${machine}" in
+        x86_64)
+            ARCH_APK="x86_64"
+            ARCH_IPK="x86_64"
+            ;;
+        aarch64)
+            # Попробуем определить конкретный CPU для лучшего подбора
+            local cpuinfo
+            cpuinfo=$(cat /proc/cpuinfo 2>/dev/null | grep -i 'model name\|CPU part' | head -2)
+            case "${cpuinfo}" in
+                *a72*|*A72*)
+                    ARCH_APK="aarch64_cortex-a72"
+                    ARCH_IPK="aarch64_cortex-a72"
+                    ;;
+                *)
+                    ARCH_APK="aarch64_cortex-a53"
+                    ARCH_IPK="aarch64_cortex-a53"
+                    ;;
+            esac
+            ;;
+        armv7l)
+            local cpuinfo
+            cpuinfo=$(cat /proc/cpuinfo 2>/dev/null | grep -i 'model name\|CPU part' | head -2)
+            case "${cpuinfo}" in
+                *a15*)
+                    ARCH_APK="arm_cortex-a15_neon-vfpv4"
+                    ARCH_IPK="arm_cortex-a15_neon-vfpv4"
+                    ;;
+                *a9*)
+                    ARCH_APK="arm_cortex-a9_neon"
+                    ARCH_IPK="arm_cortex-a9_neon"
+                    ;;
+                *a8*)
+                    ARCH_APK="arm_cortex-a8_vfpv3"
+                    ARCH_IPK="arm_cortex-a8_vfpv3"
+                    ;;
+                *a5*)
+                    ARCH_APK="arm_cortex-a5_vfpv4"
+                    ARCH_IPK="arm_cortex-a5_vfpv4"
+                    ;;
+                *)
+                    ARCH_APK="arm_cortex-a7"
+                    ARCH_IPK="arm_cortex-a7"
+                    ;;
+            esac
+            ;;
+        i686)
+            ARCH_APK="i386"
+            ARCH_IPK="i386"
+            ;;
+        mips)
+            # Определяем конкретный MIPS CPU
+            local cpuinfo
+            cpuinfo=$(cat /proc/cpuinfo 2>/dev/null | grep -i 'model name\|CPU part' | head -2)
+            case "${cpuinfo}" in
+                *4kec*)
+                    ARCH_APK="mips_4kec"
+                    ARCH_IPK="mips_4kec"
+                    ;;
+                *)
+                    ARCH_APK="mips_mips32"
+                    ARCH_IPK="mips_mips32"
+                    ;;
+            esac
+            ;;
+        mipsel)
+            local cpuinfo
+            cpuinfo=$(cat /proc/cpuinfo 2>/dev/null | grep -i 'model name\|CPU part' | head -2)
+            case "${cpuinfo}" in
+                *74kc*)
+                    ARCH_APK="mipsel_74kc"
+                    ;;
+                *)
+                    ARCH_APK="mipsel_mips32"
+                    ;;
+            esac
+            case "${cpuinfo}" in
+                *24kc*)
+                    ARCH_IPK="mipsel_24kc"
+                    ;;
+                *)
+                    ARCH_IPK="mipsel_mips32"
+                    ;;
+            esac
+            ;;
+        *)
+            ARCH_APK="${machine}"
+            ARCH_IPK="${machine}"
+            ;;
+    esac
+    log_info "Архитектура APK: ${ARCH_APK}"
+    log_info "Архитектура IPK: ${ARCH_IPK}"
+}
+
 # --- Определение пакетного менеджера ---
 detect_pkg_manager() {
     if command -v apk >/dev/null 2>&1; then
@@ -209,7 +309,11 @@ download_files() {
     local BASE="https://github.com/${REPO}/releases/download/${PW2_TAG}"
     local failed=0
 
-    log_info "Скачивание для ${ARCH} (тег: ${PW2_TAG})..."
+    if [ "${PKG_MANAGER}" = "apk" ]; then
+        log_info "Скачивание для ${ARCH_APK} (тег: ${PW2_TAG})..."
+    else
+        log_info "Скачивание для ${ARCH_IPK} (тег: ${PW2_TAG})..."
+    fi
     log_info ""
 
     if [ "${PKG_MANAGER}" = "apk" ]; then
@@ -229,7 +333,7 @@ download_files() {
         fi
 
         # Зависимости
-        download_file "${BASE}/passwall_packages_apk_${ARCH}.zip" \
+        download_file "${BASE}/passwall_packages_apk_${ARCH_APK}.zip" \
             "${INSTALL_DIR}/passwall_packages.zip" || failed=1
     else
         # IPK: luci-app-passwall2_{VERSION}-r{RELEASE}_all.ipk
@@ -246,7 +350,7 @@ download_files() {
                 "${INSTALL_DIR}/luci-i18n-passwall2-${LANG_CODE}.ipk" || failed=1
         fi
 
-        download_file "${BASE}/passwall_packages_ipk_${ARCH}.zip" \
+        download_file "${BASE}/passwall_packages_ipk_${ARCH_IPK}.zip" \
             "${INSTALL_DIR}/passwall_packages.zip" || failed=1
     fi
 
@@ -330,7 +434,7 @@ install_base_deps() {
         local missing=""
         local pkgs="coreutils coreutils-base64 coreutils-nohup curl \
             libuci-lua lua luci-compat luci-lib-jsonc lyaml resolveip unzip \
-            ip-full   "
+            ip-full kmod-nft-socket kmod-nft-tproxy  "
 
         for pkg in ${pkgs}; do
             if ! opkg list-installed 2>/dev/null | grep -q "^${pkg} "; then
@@ -511,6 +615,7 @@ case "${1:-}" in
     *) [ -n "${1:-}" ] && PW2_TAG="${1}" ;;
 esac
 check_platform
+detect_arch
 detect_pkg_manager
 install_base_deps
 
