@@ -134,8 +134,14 @@ detect_arch() {
         arch_from_pkg=$(apk --print-arch 2>/dev/null)
         log_info "Архитектура от APK: ${arch_from_pkg}"
     elif command -v opkg >/dev/null 2>&1; then
-        # opkg print-architecture возвращает список, берем первую архитектуру
-        arch_from_pkg=$(opkg print-architecture 2>/dev/null | head -1 | awk '{print $1}')
+        # Пробуем получить архитектуру из /etc/openwrt_release (более надежно)
+        if [ -f /etc/openwrt_release ]; then
+            arch_from_pkg=$(grep DISTRIB_ARCH /etc/openwrt_release 2>/dev/null | cut -d= -f2 | tr -d '"')
+        fi
+        # Если не получилось, пробуем opkg (но пропускаем "arch")
+        if [ -z "${arch_from_pkg}" ] || [ "${arch_from_pkg}" = "arch" ]; then
+            arch_from_pkg=$(opkg print-architecture 2>/dev/null | grep -v '^arch$' | head -1 | awk '{print $1}')
+        fi
         log_info "Архитектура от OPKG: ${arch_from_pkg}"
     fi
     
@@ -149,6 +155,10 @@ detect_arch() {
             aarch64_cortex-a53|aarch64_cortex-a72)
                 ARCH_APK="${arch_from_pkg}"
                 ARCH_IPK="${arch_from_pkg}"
+                ;;
+            aarch64_generic)
+                ARCH_APK="aarch64_cortex-a53"
+                ARCH_IPK="aarch64_cortex-a53"
                 ;;
             aarch64)
                 # Попробуем определить конкретный CPU для лучшего подбора
