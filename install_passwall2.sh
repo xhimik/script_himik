@@ -137,9 +137,13 @@ detect_arch() {
         # Пробуем получить архитектуру из /etc/openwrt_release (более надежно)
         if [ -f /etc/openwrt_release ]; then
             arch_from_pkg=$(grep DISTRIB_ARCH /etc/openwrt_release 2>/dev/null | cut -d= -f2 | tr -d '"')
+            log_info "DISTRIB_ARCH из /etc/openwrt_release: ${arch_from_pkg}"
+        else
+            log_info "Файл /etc/openwrt_release не найден"
         fi
         # Если не получилось, пробуем opkg (но пропускаем "arch")
         if [ -z "${arch_from_pkg}" ] || [ "${arch_from_pkg}" = "arch" ]; then
+            log_info "Пробуем opkg print-architecture..."
             arch_from_pkg=$(opkg print-architecture 2>/dev/null | grep -v '^arch$' | head -1 | awk '{print $1}')
         fi
         log_info "Архитектура от OPKG: ${arch_from_pkg}"
