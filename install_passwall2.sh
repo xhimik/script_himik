@@ -127,209 +127,88 @@ parse_tag() {
 
 # --- Определение архитектуры ---
 detect_arch() {
-    local arch_from_pkg=""
-    
-    # Сначала пробуем получить архитектуру от пакетного менеджера
-    if command -v apk >/dev/null 2>&1; then
-        arch_from_pkg=$(apk --print-arch 2>/dev/null)
-        log_info "Архитектура от APK: ${arch_from_pkg}"
-    elif command -v opkg >/dev/null 2>&1; then
-        # Пробуем получить архитектуру из /etc/openwrt_release (более надежно)
-        if [ -f /etc/openwrt_release ]; then
-            arch_from_pkg=$(grep DISTRIB_ARCH /etc/openwrt_release 2>/dev/null | cut -d= -f2 | tr -d '"')
-            log_info "DISTRIB_ARCH из /etc/openwrt_release: ${arch_from_pkg}"
-        else
-            log_info "Файл /etc/openwrt_release не найден"
-        fi
-        # Если не получилось, пробуем opkg (но пропускаем "arch")
-        if [ -z "${arch_from_pkg}" ] || [ "${arch_from_pkg}" = "arch" ]; then
-            log_info "Пробуем opkg print-architecture..."
-            arch_from_pkg=$(opkg print-architecture 2>/dev/null | grep -v '^arch$' | head -1 | awk '{print $1}')
-        fi
-        log_info "Архитектура от OPKG: ${arch_from_pkg}"
-    fi
-    
-    # Если пакетный менеджер доступен, используем его архитектуру
-    if [ -n "${arch_from_pkg}" ]; then
-        case "${arch_from_pkg}" in
-            x86_64)
-                ARCH_APK="x86_64"
-                ARCH_IPK="x86_64"
-                ;;
-            aarch64_cortex-a53|aarch64_cortex-a72)
-                ARCH_APK="${arch_from_pkg}"
-                ARCH_IPK="${arch_from_pkg}"
-                ;;
-            aarch64_generic)
-                ARCH_APK="aarch64_cortex-a53"
-                ARCH_IPK="aarch64_cortex-a53"
-                ;;
-            aarch64)
-                # Попробуем определить конкретный CPU для лучшего подбора
-                local cpuinfo
-                cpuinfo=$(cat /proc/cpuinfo 2>/dev/null | grep -i 'model name\|CPU part' | head -2)
-                case "${cpuinfo}" in
-                    *a72*|*A72*)
-                        ARCH_APK="aarch64_cortex-a72"
-                        ARCH_IPK="aarch64_cortex-a72"
-                        ;;
-                    *)
-                        ARCH_APK="aarch64_cortex-a53"
-                        ARCH_IPK="aarch64_cortex-a53"
-                        ;;
-                esac
-                ;;
-            arm_cortex-a15_neon-vfpv4|arm_cortex-a9_neon|arm_cortex-a8_vfpv3|arm_cortex-a5_vfpv4|arm_cortex-a7)
-                ARCH_APK="${arch_from_pkg}"
-                ARCH_IPK="${arch_from_pkg}"
-                ;;
-            armv7l|arm)
-                local cpuinfo
-                cpuinfo=$(cat /proc/cpuinfo 2>/dev/null | grep -i 'model name\|CPU part' | head -2)
-                case "${cpuinfo}" in
-                    *a15*)
-                        ARCH_APK="arm_cortex-a15_neon-vfpv4"
-                        ARCH_IPK="arm_cortex-a15_neon-vfpv4"
-                        ;;
-                    *a9*)
-                        ARCH_APK="arm_cortex-a9_neon"
-                        ARCH_IPK="arm_cortex-a9_neon"
-                        ;;
-                    *a8*)
-                        ARCH_APK="arm_cortex-a8_vfpv3"
-                        ARCH_IPK="arm_cortex-a8_vfpv3"
-                        ;;
-                    *a5*)
-                        ARCH_APK="arm_cortex-a5_vfpv4"
-                        ARCH_IPK="arm_cortex-a5_vfpv4"
-                        ;;
-                    *)
-                        ARCH_APK="arm_cortex-a7"
-                        ARCH_IPK="arm_cortex-a7"
-                        ;;
-                esac
-                ;;
-            i386|i686)
-                ARCH_APK="i386"
-                ARCH_IPK="i386"
-                ;;
-            mips_4kec|mips_mips32)
-                ARCH_APK="${arch_from_pkg}"
-                ARCH_IPK="${arch_from_pkg}"
-                ;;
-            mips)
-                # Определяем конкретный MIPS CPU
-                local cpuinfo
-                cpuinfo=$(cat /proc/cpuinfo 2>/dev/null | grep -i 'model name\|CPU part' | head -2)
-                case "${cpuinfo}" in
-                    *4kec*)
-                        ARCH_APK="mips_4kec"
-                        ARCH_IPK="mips_4kec"
-                        ;;
-                    *)
-                        ARCH_APK="mips_mips32"
-                        ARCH_IPK="mips_mips32"
-                        ;;
-                esac
-                ;;
-            mipsel_74kc|mipsel_24kc|mipsel_mips32)
-                ARCH_APK="${arch_from_pkg}"
-                ARCH_IPK="${arch_from_pkg}"
-                ;;
-            mipsel)
-                local cpuinfo
-                cpuinfo=$(cat /proc/cpuinfo 2>/dev/null | grep -i 'model name\|CPU part' | head -2)
-                case "${cpuinfo}" in
-                    *74kc*)
-                        ARCH_APK="mipsel_74kc"
-                        ;;
-                    *)
-                        ARCH_APK="mipsel_mips32"
-                        ;;
-                esac
-                case "${cpuinfo}" in
-                    *24kc*)
-                        ARCH_IPK="mipsel_24kc"
-                        ;;
-                    *)
-                        ARCH_IPK="mipsel_mips32"
-                        ;;
-                esac
-                ;;
-            *)
-                # Fallback на uname -m если архитектура от пакетного менеджера неизвестна
-                local machine
-                machine=$(uname -m 2>/dev/null)
-                log_warn "Неизвестная архитектура от пакетного менеджера: ${arch_from_pkg}, используем uname -m: ${machine}"
-                case "${machine}" in
-                    x86_64)
-                        ARCH_APK="x86_64"
-                        ARCH_IPK="x86_64"
-                        ;;
-                    aarch64)
-                        ARCH_APK="aarch64_cortex-a53"
-                        ARCH_IPK="aarch64_cortex-a53"
-                        ;;
-                    armv7l)
-                        ARCH_APK="arm_cortex-a7"
-                        ARCH_IPK="arm_cortex-a7"
-                        ;;
-                    i686)
-                        ARCH_APK="i386"
-                        ARCH_IPK="i386"
-                        ;;
-                    mips)
-                        ARCH_APK="mips_mips32"
-                        ARCH_IPK="mips_mips32"
-                        ;;
-                    mipsel)
-                        ARCH_APK="mipsel_mips32"
-                        ARCH_IPK="mipsel_mips32"
-                        ;;
-                    *)
-                        ARCH_APK="${machine}"
-                        ARCH_IPK="${machine}"
-                        ;;
-                esac
-                ;;
-        esac
-    else
-        # Fallback: если пакетный менеджер недоступен, используем uname -m
-        local machine
-        machine=$(uname -m 2>/dev/null)
-        log_warn "Пакетный менеджер недоступен, используем uname -m: ${machine}"
+    local machine
+    local owrt_arch
+
+    machine=$(uname -m 2>/dev/null)
+    owrt_arch=$(grep DISTRIB_ARCH /etc/openwrt_release 2>/dev/null | cut -d= -f2 | tr -d '"')
+
+    # Сначала используем OpenWrt ARCH если доступен
+    case "${owrt_arch}" in
+        aarch64_generic)
+            ARCH_APK="aarch64_generic"
+            ARCH_IPK="aarch64_generic"
+            ;;
+
+        aarch64_cortex-a53)
+            ARCH_APK="aarch64_cortex-a53"
+            ARCH_IPK="aarch64_cortex-a53"
+            ;;
+
+        aarch64_cortex-a72)
+            ARCH_APK="aarch64_cortex-a72"
+            ARCH_IPK="aarch64_cortex-a72"
+            ;;
+
+        arm_cortex-a15_neon-vfpv4|\
+        arm_cortex-a9_neon|\
+        arm_cortex-a8_vfpv3|\
+        arm_cortex-a5_vfpv4|\
+        arm_cortex-a7|\
+        mips_4kec|\
+        mips_mips32|\
+        mipsel_24kc|\
+        mipsel_74kc|\
+        mipsel_mips32|\
+        x86_64|\
+        i386)
+
+            ARCH_APK="${owrt_arch}"
+            ARCH_IPK="${owrt_arch}"
+            ;;
+    esac
+
+    # Если OpenWrt ARCH не найден — fallback
+    if [ -z "${ARCH_APK}" ] || [ -z "${ARCH_IPK}" ]; then
         case "${machine}" in
             x86_64)
                 ARCH_APK="x86_64"
                 ARCH_IPK="x86_64"
                 ;;
+
             aarch64)
-                ARCH_APK="aarch64_cortex-a53"
-                ARCH_IPK="aarch64_cortex-a53"
+                ARCH_APK="aarch64_generic"
+                ARCH_IPK="aarch64_generic"
                 ;;
+
             armv7l)
                 ARCH_APK="arm_cortex-a7"
                 ARCH_IPK="arm_cortex-a7"
                 ;;
+
             i686)
                 ARCH_APK="i386"
                 ARCH_IPK="i386"
                 ;;
+
             mips)
                 ARCH_APK="mips_mips32"
                 ARCH_IPK="mips_mips32"
                 ;;
+
             mipsel)
                 ARCH_APK="mipsel_mips32"
                 ARCH_IPK="mipsel_mips32"
                 ;;
+
             *)
                 ARCH_APK="${machine}"
                 ARCH_IPK="${machine}"
                 ;;
         esac
     fi
-    
+
+    log_info "OpenWrt ARCH: ${owrt_arch:-unknown}"
     log_info "Архитектура APK: ${ARCH_APK}"
     log_info "Архитектура IPK: ${ARCH_IPK}"
 }
